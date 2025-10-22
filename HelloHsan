@@ -1,0 +1,27 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
+
+contract Hasan {
+    address public owner;
+    string public name = "Hasan";
+    string public message;
+
+    constructor(string memory _message) {
+        owner = msg.sender;
+        message = _message;
+    }
+
+    function setMessage(string calldata _newMessage) external {
+        require(msg.sender == owner, "Sadece sahibi degistirebilir.");
+        message = _newMessage;
+    }
+
+    function getMessage() external view returns (string memory) {
+        return message;
+    }
+
+    function transferOwnership(address _newOwner) external {
+        require(msg.sender == owner, "Sadece sahibi degistirebilir.");
+        owner = _newOwner;
+    }
+}
