@@ -22,7 +22,7 @@ import {
   Globe
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { NOMAD_MAP_ABI } from './constants';
+import { NOMAD_MAP_ABI, BASE_SEPOLIA_CONFIG } from './constants';
 import { cn } from './lib/utils';
 
 // Fix Leaflet marker icons
@@ -112,6 +112,7 @@ export default function App() {
   const [isConnecting, setIsConnecting] = useState(false);
   const [walletType, setWalletType] = useState<'metamask' | 'phantom' | null>(null);
   const [isWalletModalOpen, setIsWalletModalOpen] = useState(false);
+  const [ncatBalance, setNcatBalance] = useState<number>(0);
   const [notification, setNotification] = useState<{ message: string, type: 'error' | 'success' | 'info' } | null>(null);
   const [formData, setFormData] = useState({
     name: '',
@@ -126,16 +127,44 @@ export default function App() {
   };
 
   // --- Blockchain Interaction ---
+  const switchToBaseSepolia = async () => {
+    if (typeof window.ethereum === 'undefined') return;
+    
+    try {
+      await window.ethereum.request({
+        method: 'wallet_switchEthereumChain',
+        params: [{ chainId: BASE_SEPOLIA_CONFIG.chainId }],
+      });
+    } catch (switchError: any) {
+      // This error code indicates that the chain has not been added to MetaMask.
+      if (switchError.code === 4902) {
+        try {
+          await window.ethereum.request({
+            method: 'wallet_addEthereumChain',
+            params: [BASE_SEPOLIA_CONFIG],
+          });
+        } catch (addError) {
+          console.error("Failed to add Base Sepolia", addError);
+        }
+      }
+      console.error("Failed to switch to Base Sepolia", switchError);
+    }
+  };
+
   const connectMetaMask = async () => {
     if (typeof window.ethereum !== 'undefined') {
       try {
         setIsConnecting(true);
+        
+        // Ensure we are on Base Sepolia
+        await switchToBaseSepolia();
+
         const provider = new ethers.BrowserProvider(window.ethereum);
         const accounts = await provider.send("eth_requestAccounts", []);
         setAccount(accounts[0]);
         setWalletType('metamask');
         setIsWalletModalOpen(false);
-        showNotification("MetaMask connected successfully!", "success");
+        showNotification("MetaMask connected successfully to Base Sepolia!", "success");
         
         // Replace with your deployed contract address
         const contractAddress = "0x0000000000000000000000000000000000000000"; 
@@ -301,7 +330,8 @@ export default function App() {
       if (selectedLocation?.id === locationId) {
         setSelectedLocation(prev => prev ? { ...prev, totalCheckIns: prev.totalCheckIns + 1 } : null);
       }
-      showNotification("Check-in successful (Demo Mode)!", "success");
+      setNcatBalance(prev => prev + 10);
+      showNotification("Check-in successful! You earned 10 NCAT tokens.", "success");
       return;
     }
 
@@ -309,7 +339,8 @@ export default function App() {
       const tx = await contract.checkIn(locationId);
       await tx.wait();
       loadLocations(contract);
-      showNotification("Check-in successful on-chain!", "success");
+      setNcatBalance(prev => prev + 10);
+      showNotification("Check-in successful on-chain! You earned 10 NCAT tokens.", "success");
     } catch (error: any) {
       console.error("Check-in failed", error);
       if (error.code === "ACTION_REJECTED" || error.code === 4001) {
@@ -477,7 +508,7 @@ export default function App() {
             onClick={() => account ? disconnectWallet() : setIsWalletModalOpen(true)}
             disabled={isConnecting}
             className={cn(
-              "w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl font-medium transition-all duration-200 mb-3",
+              "w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl font-medium transition-all duration-200 mb-2",
               account 
                 ? "bg-emerald-50 text-emerald-700 border border-emerald-100 hover:bg-emerald-100" 
                 : "bg-indigo-600 text-white hover:bg-indigo-700 shadow-md hover:shadow-lg"
@@ -491,6 +522,16 @@ export default function App() {
               </div>
             ) : isConnecting ? "Connecting..." : "Connect Wallet"}
           </button>
+
+          {account && (
+            <div className="flex items-center justify-between px-4 py-2 bg-indigo-50 rounded-xl border border-indigo-100 mb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-6 h-6 bg-indigo-600 rounded-full flex items-center justify-center text-[10px] text-white font-bold">NC</div>
+                <span className="text-xs font-bold text-indigo-700 uppercase tracking-wider">NCAT Balance</span>
+              </div>
+              <span className="text-lg font-black text-indigo-600">{ncatBalance}</span>
+            </div>
+          )}
 
           <div className="flex flex-col gap-2 p-3 bg-slate-50 rounded-xl border border-slate-100">
             <div className="flex items-center justify-between">
