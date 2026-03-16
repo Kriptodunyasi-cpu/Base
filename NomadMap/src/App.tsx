@@ -167,7 +167,7 @@ export default function App() {
         showNotification("MetaMask connected successfully to Base Sepolia!", "success");
         
         // Replace with your deployed contract address
-        const contractAddress = "0x0000000000000000000000000000000000000000"; 
+       const contractAddress: string = "0x9520544D5548E05dfCED8Dd0EFC771538a1E445C";
         if (contractAddress !== "0x0000000000000000000000000000000000000000") {
           const signer = await provider.getSigner();
           const nomadContract = new ethers.Contract(contractAddress, NOMAD_MAP_ABI, signer);
