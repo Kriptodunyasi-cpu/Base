@@ -1,3 +1,11 @@
+// src/constants.ts
+export const BASE_SEPOLIA_CONFIG = {
+  chainId: '0x14a34', // 84532 in hex
+  chainName: 'Base Sepolia',
+  nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+  rpcUrls: ['https://sepolia.base.org'],
+  blockExplorerUrls: ['https://sepolia.basescan.org']
+};
 export const NOMAD_MAP_ABI = [
   {
     "anonymous": false,
