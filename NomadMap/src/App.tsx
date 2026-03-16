@@ -19,7 +19,13 @@ import {
   Wallet,
   X,
   Info,
-  Globe
+  Globe,
+  Trophy,
+  ChevronRight,
+  MessageSquare,
+  ShieldAlert,
+  UserX,
+  Send
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { NOMAD_MAP_ABI, BASE_SEPOLIA_CONFIG } from './constants';
@@ -43,6 +49,14 @@ declare global {
   interface Window {
     solana: any;
   }
+}
+
+interface Message {
+  id: number;
+  from: string;
+  to: string;
+  content: string;
+  timestamp: number;
 }
 
 interface Location {
@@ -113,6 +127,13 @@ export default function App() {
   const [walletType, setWalletType] = useState<'metamask' | 'phantom' | null>(null);
   const [isWalletModalOpen, setIsWalletModalOpen] = useState(false);
   const [ncatBalance, setNcatBalance] = useState<number>(0);
+  const [userRank, setUserRank] = useState<'Iron' | 'Bronze' | 'Silver' | 'Gold' | 'Platinum' | 'Emerald' | 'Diamond' | 'Master' | 'Grandmaster' | 'Challenger'>('Iron');
+  const [isRankModalOpen, setIsRankModalOpen] = useState(false);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [blockedUsers, setBlockedUsers] = useState<string[]>([]);
+  const [isMessagingOpen, setIsMessagingOpen] = useState(false);
+  const [activeChat, setActiveChat] = useState<string | null>(null);
+  const [messageInput, setMessageInput] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [notification, setNotification] = useState<{ message: string, type: 'error' | 'success' | 'info' } | null>(null);
@@ -324,6 +345,9 @@ export default function App() {
       }
     }
 
+    // Reward based on rank
+    const reward = 500; // Base reward increased for 10B supply
+
     if (!contract) {
       // Demo mode
       setLocations(locations.map(loc => 
@@ -332,8 +356,8 @@ export default function App() {
       if (selectedLocation?.id === locationId) {
         setSelectedLocation(prev => prev ? { ...prev, totalCheckIns: prev.totalCheckIns + 1 } : null);
       }
-      setNcatBalance(prev => prev + 10);
-      showNotification("Check-in successful! You earned 10 NCAT tokens.", "success");
+      setNcatBalance(prev => prev + reward);
+      showNotification(`Check-in successful! You earned ${reward} NCAT tokens.`, "success");
       return;
     }
 
@@ -341,8 +365,8 @@ export default function App() {
       const tx = await contract.checkIn(locationId);
       await tx.wait();
       loadLocations(contract);
-      setNcatBalance(prev => prev + 10);
-      showNotification("Check-in successful on-chain! You earned 10 NCAT tokens.", "success");
+      setNcatBalance(prev => prev + reward);
+      showNotification(`Check-in successful on-chain! You earned ${reward} NCAT tokens.`, "success");
     } catch (error: any) {
       console.error("Check-in failed", error);
       if (error.code === "ACTION_REJECTED" || error.code === 4001) {
@@ -350,6 +374,71 @@ export default function App() {
       } else {
         showNotification(`Check-in failed: ${error.message || "Unknown error"}`, "error");
       }
+    }
+  };
+
+  const upgradeRank = (targetRank: typeof userRank) => {
+    const costs: Record<string, number> = {
+      Bronze: 5000,
+      Silver: 25000,
+      Gold: 100000,
+      Platinum: 250000,
+      Emerald: 750000,
+      Diamond: 2000000,
+      Master: 10000000,
+      Grandmaster: 50000000,
+      Challenger: 250000000
+    };
+    const cost = costs[targetRank];
+
+    if (ncatBalance < cost) {
+      showNotification(`Insufficient NCAT! You need ${cost.toLocaleString()} NCAT for ${targetRank} rank.`, "error");
+      return;
+    }
+
+    setNcatBalance(prev => prev - cost);
+    setUserRank(targetRank);
+    setIsRankModalOpen(false);
+    showNotification(`Congratulations! You are now ${targetRank} rank.`, "success");
+  };
+
+  const getRankConfig = () => {
+    switch (userRank) {
+      case 'Challenger': return { color: 'text-cyan-400', bg: 'bg-cyan-50', border: 'border-cyan-200', limit: 2000, messaging: true };
+      case 'Grandmaster': return { color: 'text-rose-600', bg: 'bg-rose-50', border: 'border-rose-200', limit: 1500, messaging: true };
+      case 'Master': return { color: 'text-purple-600', bg: 'bg-purple-50', border: 'border-purple-200', limit: 1200, messaging: true };
+      case 'Diamond': return { color: 'text-blue-400', bg: 'bg-blue-50', border: 'border-blue-200', limit: 1000, messaging: true };
+      case 'Emerald': return { color: 'text-emerald-500', bg: 'bg-emerald-50', border: 'border-emerald-200', limit: 800, messaging: true };
+      case 'Platinum': return { color: 'text-teal-400', bg: 'bg-teal-50', border: 'border-teal-200', limit: 600, messaging: true };
+      case 'Gold': return { color: 'text-amber-500', bg: 'bg-amber-50', border: 'border-amber-200', limit: 500, messaging: false };
+      case 'Silver': return { color: 'text-slate-400', bg: 'bg-slate-50', border: 'border-slate-200', limit: 250, messaging: false };
+      case 'Bronze': return { color: 'text-orange-700', bg: 'bg-orange-50', border: 'border-orange-100', limit: 150, messaging: false };
+      default: return { color: 'text-slate-500', bg: 'bg-slate-50', border: 'border-slate-100', limit: 100, messaging: false };
+    }
+  };
+
+  const rankConfig = getRankConfig();
+
+  const sendMessage = () => {
+    if (!activeChat || !messageInput.trim() || !account) return;
+    
+    const newMessage: Message = {
+      id: Date.now(),
+      from: account,
+      to: activeChat,
+      content: messageInput,
+      timestamp: Date.now()
+    };
+
+    setMessages([...messages, newMessage]);
+    setMessageInput('');
+  };
+
+  const blockUser = (userAddress: string) => {
+    if (!blockedUsers.includes(userAddress)) {
+      setBlockedUsers([...blockedUsers, userAddress]);
+      showNotification("User blocked successfully.", "info");
+      setActiveChat(null);
     }
   };
 
@@ -540,12 +629,48 @@ export default function App() {
           </button>
 
           {account && (
-            <div className="flex items-center justify-between px-4 py-2 bg-indigo-50 rounded-xl border border-indigo-100 mb-3">
-              <div className="flex items-center gap-2">
-                <div className="w-6 h-6 bg-indigo-600 rounded-full flex items-center justify-center text-[10px] text-white font-bold">NC</div>
-                <span className="text-xs font-bold text-indigo-700 uppercase tracking-wider">NCAT Balance</span>
+            <div className="space-y-2 mb-4">
+              <div className="flex items-center justify-between px-4 py-2 bg-indigo-50 rounded-xl border border-indigo-100">
+                <div className="flex items-center gap-2">
+                  <div className="w-6 h-6 bg-indigo-600 rounded-full flex items-center justify-center text-[10px] text-white font-bold">NC</div>
+                  <span className="text-xs font-bold text-indigo-700 uppercase tracking-wider">NCAT Balance</span>
+                </div>
+                <span className="text-lg font-black text-indigo-600">{ncatBalance}</span>
               </div>
-              <span className="text-lg font-black text-indigo-600">{ncatBalance}</span>
+
+              <div 
+                onClick={() => setIsRankModalOpen(true)}
+                className={cn(
+                  "flex items-center justify-between px-4 py-2 rounded-xl border cursor-pointer hover:shadow-md transition-all",
+                  rankConfig.bg, rankConfig.border
+                )}
+              >
+                <div className="flex items-center gap-2">
+                  <Trophy className={cn("w-4 h-4", rankConfig.color)} />
+                  <span className={cn("text-xs font-bold uppercase tracking-wider", rankConfig.color)}>{userRank} Rank</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase">Upgrade</span>
+                  <ChevronRight className="w-3 h-3 text-slate-400" />
+                </div>
+              </div>
+
+              {rankConfig.messaging && (
+                <button 
+                  onClick={() => setIsMessagingOpen(true)}
+                  className="w-full flex items-center justify-between px-4 py-2 bg-slate-900 text-white rounded-xl hover:bg-slate-800 transition-all shadow-sm"
+                >
+                  <div className="flex items-center gap-2">
+                    <MessageSquare className="w-4 h-4 text-teal-400" />
+                    <span className="text-xs font-bold uppercase tracking-wider">Messages</span>
+                  </div>
+                  {messages.filter(m => m.to === account).length > 0 && (
+                    <span className="bg-teal-500 text-white text-[10px] px-1.5 py-0.5 rounded-full font-black">
+                      {messages.filter(m => m.to === account).length}
+                    </span>
+                  )}
+                </button>
+              )}
             </div>
           )}
 
@@ -822,14 +947,24 @@ export default function App() {
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-semibold text-slate-400 uppercase mb-1">Description</label>
+                      <div className="flex justify-between mb-1">
+                        <label className="text-xs font-semibold text-slate-400 uppercase">Description</label>
+                        <span className={cn("text-[10px] font-bold", formData.description.length > rankConfig.limit ? "text-rose-500" : "text-slate-400")}>
+                          {formData.description.length} / {rankConfig.limit}
+                        </span>
+                      </div>
                       <textarea 
                         required
                         value={formData.description}
                         onChange={e => setFormData({...formData, description: e.target.value})}
                         className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none h-20 resize-none"
-                        placeholder="Tell us about this place..."
+                        placeholder={`Tell us about this place... (Max ${rankConfig.limit} chars)`}
                       />
+                      {formData.description.length > rankConfig.limit && (
+                        <p className="text-[10px] text-rose-500 font-bold mt-1 uppercase tracking-tighter">
+                          Character limit exceeded! Upgrade your rank to write more.
+                        </p>
+                      )}
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                       <div>
@@ -864,6 +999,222 @@ export default function App() {
                 </>
               )}
             </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* --- Rank Upgrade Modal --- */}
+        <AnimatePresence>
+          {isRankModalOpen && (
+            <div className="fixed inset-0 z-[3000] flex items-center justify-center p-4">
+              <motion.div 
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setIsRankModalOpen(false)}
+                className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+              />
+              <motion.div
+                initial={{ scale: 0.9, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.9, opacity: 0 }}
+                className="relative w-full max-w-2xl bg-white rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
+              >
+                <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-white sticky top-0 z-10">
+                  <div>
+                    <h2 className="text-2xl font-bold text-slate-900">Nomad Rank Tiers</h2>
+                    <p className="text-sm text-slate-500">Upgrade your status to unlock premium features</p>
+                  </div>
+                  <button onClick={() => setIsRankModalOpen(false)} className="p-2 hover:bg-slate-100 rounded-full transition-colors">
+                    <X className="w-6 h-6 text-slate-400" />
+                  </button>
+                </div>
+
+                <div className="p-6 overflow-y-auto grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {[
+                    { name: 'Bronze', cost: 5000, color: 'text-orange-700', bg: 'bg-orange-50', border: 'border-orange-100', features: ['150 Char Limit', 'Bronze Badge'] },
+                    { name: 'Silver', cost: 25000, color: 'text-slate-400', bg: 'bg-slate-50', border: 'border-slate-200', features: ['250 Char Limit', 'Silver Badge'] },
+                    { name: 'Gold', cost: 100000, color: 'text-amber-500', bg: 'bg-amber-50', border: 'border-amber-200', features: ['500 Char Limit', 'Gold Badge'] },
+                    { name: 'Platinum', cost: 250000, color: 'text-teal-400', bg: 'bg-teal-50', border: 'border-teal-200', features: ['600 Char Limit', 'Messaging Unlocked'] },
+                    { name: 'Emerald', cost: 750000, color: 'text-emerald-500', bg: 'bg-emerald-50', border: 'border-emerald-200', features: ['800 Char Limit', 'Emerald Flair'] },
+                    { name: 'Diamond', cost: 2000000, color: 'text-blue-400', bg: 'bg-blue-50', border: 'border-blue-200', features: ['1000 Char Limit', 'Diamond Border'] },
+                    { name: 'Master', cost: 10000000, color: 'text-purple-600', bg: 'bg-purple-50', border: 'border-purple-200', features: ['1200 Char Limit', 'Master Status'] },
+                    { name: 'Grandmaster', cost: 50000000, color: 'text-rose-600', bg: 'bg-rose-50', border: 'border-rose-200', features: ['1500 Char Limit', 'GM Global Chat'] },
+                    { name: 'Challenger', cost: 250000000, color: 'text-cyan-400', bg: 'bg-cyan-50', border: 'border-cyan-200', features: ['2000 Char Limit', 'The Ultimate Legend'] }
+                  ].map((tier) => {
+                    const isUnlocked = [
+                      'Iron', 'Bronze', 'Silver', 'Gold', 'Platinum', 'Emerald', 'Diamond', 'Master', 'Grandmaster', 'Challenger'
+                    ].indexOf(userRank) >= [
+                      'Iron', 'Bronze', 'Silver', 'Gold', 'Platinum', 'Emerald', 'Diamond', 'Master', 'Grandmaster', 'Challenger'
+                    ].indexOf(tier.name as any);
+                    
+                    return (
+                      <div key={tier.name} className={cn(
+                        "p-5 rounded-2xl border-2 transition-all flex flex-col justify-between",
+                        isUnlocked ? "border-emerald-200 bg-emerald-50/30" : "border-slate-100 hover:border-indigo-200"
+                      )}>
+                        <div className="flex justify-between items-start mb-3">
+                          <div>
+                            <h3 className={cn("font-bold", tier.color)}>{tier.name}</h3>
+                            <p className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">{tier.cost.toLocaleString()} NCAT</p>
+                          </div>
+                          {isUnlocked && <CheckCircle2 className="w-4 h-4 text-emerald-500" />}
+                        </div>
+                        <ul className="text-[11px] space-y-1 text-slate-600 mb-4">
+                          {tier.features.map(f => <li key={f} className="flex items-center gap-2">• {f}</li>)}
+                        </ul>
+                        {!isUnlocked ? (
+                          <button 
+                            onClick={() => upgradeRank(tier.name as any)}
+                            className="w-full py-2 bg-slate-900 text-white rounded-xl font-bold text-xs hover:bg-slate-800 transition-all"
+                          >
+                            Upgrade
+                          </button>
+                        ) : (
+                          <div className="w-full py-2 bg-emerald-100 text-emerald-700 rounded-xl font-bold text-xs text-center">
+                            {userRank === tier.name ? "Current" : "Unlocked"}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+
+        {/* --- Messaging UI --- */}
+        <AnimatePresence>
+          {isMessagingOpen && (
+            <div className="fixed inset-0 z-[4000] flex items-center justify-center p-4">
+              <motion.div 
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setIsMessagingOpen(false)}
+                className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+              />
+              <motion.div
+                initial={{ scale: 0.9, opacity: 0, y: 20 }}
+                animate={{ scale: 1, opacity: 1, y: 0 }}
+                exit={{ scale: 0.9, opacity: 0, y: 20 }}
+                className="relative w-full max-w-4xl h-[80vh] bg-white rounded-3xl shadow-2xl overflow-hidden flex"
+              >
+                {/* Chat List */}
+                <div className="w-80 border-r border-slate-100 flex flex-col bg-slate-50/50">
+                  <div className="p-6 border-b border-slate-100 bg-white">
+                    <h2 className="text-xl font-bold text-slate-900">Messages</h2>
+                    <p className="text-xs text-slate-500 mt-1">Chat with other high-rank nomads</p>
+                  </div>
+                  <div className="flex-1 overflow-y-auto p-2 space-y-1">
+                    {(Array.from(new Set(messages.map(m => m.from === account ? m.to : m.from))) as string[]).map(user => (
+                      <button
+                        key={user}
+                        onClick={() => setActiveChat(user)}
+                        className={cn(
+                          "w-full p-3 rounded-2xl text-left transition-all flex items-center gap-3",
+                          activeChat === user ? "bg-white shadow-sm border border-slate-100" : "hover:bg-white/50"
+                        )}
+                      >
+                        <div className="w-10 h-10 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-600 font-bold">
+                          {user.slice(2, 4).toUpperCase()}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-bold text-slate-900 truncate">{user.slice(0, 12)}...</p>
+                          <p className="text-[10px] text-slate-500 truncate">Click to view chat</p>
+                        </div>
+                      </button>
+                    ))}
+                    {messages.length === 0 && (
+                      <div className="p-8 text-center">
+                        <MessageSquare className="w-8 h-8 text-slate-200 mx-auto mb-2" />
+                        <p className="text-xs text-slate-400">No conversations yet</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Chat Window */}
+                <div className="flex-1 flex flex-col bg-white">
+                  {activeChat ? (
+                    <>
+                      <div className="p-4 border-b border-slate-100 flex justify-between items-center">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 bg-indigo-600 rounded-full flex items-center justify-center text-white text-xs font-bold">
+                            {activeChat.slice(2, 4).toUpperCase()}
+                          </div>
+                          <div>
+                            <p className="text-sm font-bold text-slate-900">{activeChat}</p>
+                            <p className="text-[10px] text-emerald-500 font-bold uppercase tracking-wider">Online</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button 
+                            onClick={() => blockUser(activeChat)}
+                            className="p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all"
+                            title="Block User"
+                          >
+                            <UserX className="w-5 h-5" />
+                          </button>
+                          <button onClick={() => setIsMessagingOpen(false)} className="p-2 text-slate-400 hover:bg-slate-100 rounded-xl">
+                            <X className="w-5 h-5" />
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="flex-1 overflow-y-auto p-6 space-y-4">
+                        {messages
+                          .filter(m => (m.from === account && m.to === activeChat) || (m.from === activeChat && m.to === account))
+                          .map((m, i) => (
+                            <div key={i} className={cn(
+                              "flex flex-col max-w-[80%]",
+                              m.from === account ? "ml-auto items-end" : "items-start"
+                            )}>
+                              <div className={cn(
+                                "p-3 rounded-2xl text-sm",
+                                m.from === account ? "bg-indigo-600 text-white rounded-tr-none" : "bg-slate-100 text-slate-800 rounded-tl-none"
+                              )}>
+                                {m.content}
+                              </div>
+                              <span className="text-[9px] text-slate-400 mt-1">
+                                {new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                              </span>
+                            </div>
+                          ))}
+                      </div>
+
+                      <div className="p-4 border-t border-slate-100">
+                        <div className="flex gap-2">
+                          <input
+                            value={messageInput}
+                            onChange={(e) => setMessageInput(e.target.value)}
+                            onKeyDown={(e) => e.key === 'Enter' && sendMessage()}
+                            placeholder="Type a message..."
+                            className="flex-1 px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+                          />
+                          <button 
+                            onClick={sendMessage}
+                            className="p-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-all"
+                          >
+                            <Send className="w-5 h-5" />
+                          </button>
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="flex-1 flex flex-col items-center justify-center p-12 text-center">
+                      <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mb-4">
+                        <MessageSquare className="w-10 h-10 text-slate-200" />
+                      </div>
+                      <h3 className="text-lg font-bold text-slate-900">Select a conversation</h3>
+                      <p className="text-sm text-slate-500 max-w-xs mx-auto mt-2">
+                        Connect with other high-rank nomads to share tips and coordinate meetups.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </motion.div>
+            </div>
           )}
         </AnimatePresence>
 
@@ -924,9 +1275,23 @@ export default function App() {
 
                 <div className="mt-6">
                   <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Creator</h3>
-                  <div className="flex items-center gap-2 text-sm text-slate-600">
-                    <div className="w-6 h-6 bg-slate-200 rounded-full" />
-                    <span className="font-mono">{selectedLocation.creator.slice(0, 10)}...</span>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-sm text-slate-600">
+                      <div className="w-6 h-6 bg-slate-200 rounded-full" />
+                      <span className="font-mono">{selectedLocation.creator.slice(0, 10)}...</span>
+                    </div>
+                    {rankConfig.messaging && account !== selectedLocation.creator && (
+                      <button 
+                        onClick={() => {
+                          setActiveChat(selectedLocation.creator);
+                          setIsMessagingOpen(true);
+                        }}
+                        className="p-2 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-100 transition-all"
+                        title="Message Creator"
+                      >
+                        <MessageSquare className="w-4 h-4" />
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
