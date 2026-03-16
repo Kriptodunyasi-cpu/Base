@@ -113,6 +113,8 @@ export default function App() {
   const [walletType, setWalletType] = useState<'metamask' | 'phantom' | null>(null);
   const [isWalletModalOpen, setIsWalletModalOpen] = useState(false);
   const [ncatBalance, setNcatBalance] = useState<number>(0);
+  const [selectedCategory, setSelectedCategory] = useState<string>('All');
+  const [searchQuery, setSearchQuery] = useState<string>('');
   const [notification, setNotification] = useState<{ message: string, type: 'error' | 'success' | 'info' } | null>(null);
   const [formData, setFormData] = useState({
     name: '',
@@ -167,7 +169,7 @@ export default function App() {
         showNotification("MetaMask connected successfully to Base Sepolia!", "success");
         
         // Replace with your deployed contract address
-       const contractAddress: string = "0x9520544D5548E05dfCED8Dd0EFC771538a1E445C";
+        const contractAddress: string = "0x9520544D5548E05dfCED8Dd0EFC771538a1E445C"; 
         if (contractAddress !== "0x0000000000000000000000000000000000000000") {
           const signer = await provider.getSigner();
           const nomadContract = new ethers.Contract(contractAddress, NOMAD_MAP_ABI, signer);
@@ -453,10 +455,24 @@ export default function App() {
     window.open(url, '_blank');
   };
 
+  const filteredLocations = useMemo(() => {
+    return locations.filter(loc => {
+      const matchesCategory = selectedCategory === 'All' || loc.category === selectedCategory;
+      const matchesSearch = loc.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                           loc.description.toLowerCase().includes(searchQuery.toLowerCase());
+      return matchesCategory && matchesSearch;
+    });
+  }, [locations, selectedCategory, searchQuery]);
+
   // --- Components ---
   function MapEvents() {
     useMapEvents({
-      // Map click disabled for adding spots to enforce physical presence verification
+      click(e) {
+        if (isAddingLocation) {
+          setNewLocationCoords([e.latlng.lat, e.latlng.lng]);
+          showNotification("Location selected on map!", "info");
+        }
+      },
     });
     return null;
   }
@@ -471,7 +487,7 @@ export default function App() {
   };
 
   return (
-    <div className="flex h-screen w-full bg-slate-50 font-sans text-slate-900">
+    <div className={cn("flex h-screen w-full bg-slate-50 font-sans text-slate-900", isAddingLocation && "adding-location")}>
       {/* --- Notifications --- */}
       <AnimatePresence>
         {notification && (
@@ -571,6 +587,8 @@ export default function App() {
             <input 
               type="text" 
               placeholder="Search locations..." 
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-10 pr-4 py-2 bg-slate-100 border-none rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 transition-all"
             />
           </div>
@@ -579,7 +597,13 @@ export default function App() {
             {['All', 'Cafe', 'Co-working', 'Nomad-House'].map(cat => (
               <button 
                 key={cat}
-                className="whitespace-nowrap px-3 py-1.5 rounded-full bg-slate-100 text-xs font-medium text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 transition-colors"
+                onClick={() => setSelectedCategory(cat)}
+                className={cn(
+                  "whitespace-nowrap px-4 py-2 rounded-full text-xs font-semibold transition-all duration-200",
+                  selectedCategory === cat 
+                    ? "bg-indigo-600 text-white shadow-md shadow-indigo-100" 
+                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                )}
               >
                 {cat}
               </button>
@@ -587,10 +611,15 @@ export default function App() {
           </div>
 
           <div className="space-y-3">
-            <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-400 px-2">Nearby Spots</h2>
-            {locations.map(loc => (
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-400 px-2">
+              {selectedCategory === 'All' ? 'Nearby Spots' : `${selectedCategory} Spots`} ({filteredLocations.length})
+            </h2>
+            {filteredLocations.map(loc => (
               <motion.div
                 key={loc.id}
+                layout
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
                 whileHover={{ scale: 1.02 }}
                 onClick={() => handleLocationSelect(loc)}
                 className={cn(
@@ -666,7 +695,7 @@ export default function App() {
             </Marker>
           )}
 
-          {locations.map(loc => (
+          {filteredLocations.map(loc => (
             <Marker 
               key={loc.id} 
               position={[loc.lat, loc.long]}
@@ -730,7 +759,7 @@ export default function App() {
                 <div className="space-y-4">
                   <div className="bg-indigo-50 p-4 rounded-2xl flex items-center gap-3 text-indigo-700">
                     <Navigation className="w-6 h-6 shrink-0" />
-                    <p className="text-sm font-medium">To add a new spot, you must verify your current physical location.</p>
+                    <p className="text-sm font-medium">To add a new spot, you can verify your physical location or select manually on the map.</p>
                   </div>
                   <button
                     onClick={verifyLocation}
@@ -750,7 +779,14 @@ export default function App() {
                       <div className="w-full border-t border-slate-100"></div>
                     </div>
                     <div className="relative flex justify-center text-xs uppercase">
-                      <span className="bg-white px-2 text-slate-400 font-semibold">Or for testing</span>
+                      <span className="bg-white px-2 text-slate-400 font-semibold">Or</span>
+                    </div>
+                  </div>
+
+                  <div className="p-4 bg-slate-50 rounded-2xl border border-dashed border-slate-300 text-center">
+                    <p className="text-xs text-slate-500 mb-2 font-medium italic">Click anywhere on the map to select a spot manually</p>
+                    <div className="flex items-center justify-center gap-2 text-indigo-600 animate-bounce">
+                      <MapPin className="w-4 h-4" />
                     </div>
                   </div>
 
@@ -763,57 +799,69 @@ export default function App() {
                   </button>
                 </div>
               ) : (
-                <form onSubmit={handleAddLocation} className="space-y-4">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-400 uppercase mb-1">Name</label>
-                    <input 
-                      required
-                      value={formData.name}
-                      onChange={e => setFormData({...formData, name: e.target.value})}
-                      className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
-                      placeholder="e.g. Co-working Space X"
-                    />
+                <>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="block text-xs font-semibold text-slate-400 uppercase">Spot Details</label>
+                    <button 
+                      type="button"
+                      onClick={() => setNewLocationCoords(null)}
+                      className="text-[10px] text-indigo-600 font-bold uppercase hover:underline"
+                    >
+                      Change Location
+                    </button>
                   </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-400 uppercase mb-1">Description</label>
-                    <textarea 
-                      required
-                      value={formData.description}
-                      onChange={e => setFormData({...formData, description: e.target.value})}
-                      className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none h-20 resize-none"
-                      placeholder="Tell us about this place..."
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
+                  <form onSubmit={handleAddLocation} className="space-y-4">
                     <div>
-                      <label className="block text-xs font-semibold text-slate-400 uppercase mb-1">Category</label>
-                      <select 
-                        value={formData.category}
-                        onChange={e => setFormData({...formData, category: e.target.value})}
-                        className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
-                      >
-                        <option>Cafe</option>
-                        <option>Co-working</option>
-                        <option>Nomad-House</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-400 uppercase mb-1">Image URL (Optional)</label>
+                      <label className="block text-xs font-semibold text-slate-400 uppercase mb-1">Name</label>
                       <input 
-                        value={formData.imageIPFS}
-                        onChange={e => setFormData({...formData, imageIPFS: e.target.value})}
+                        required
+                        value={formData.name}
+                        onChange={e => setFormData({...formData, name: e.target.value})}
                         className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
-                        placeholder="IPFS or HTTP link"
+                        placeholder="e.g. Co-working Space X"
                       />
                     </div>
-                  </div>
-                  <button 
-                    type="submit"
-                    className="w-full py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 shadow-lg shadow-indigo-200 transition-all"
-                  >
-                    Confirm & Add to Map
-                  </button>
-                </form>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-400 uppercase mb-1">Description</label>
+                      <textarea 
+                        required
+                        value={formData.description}
+                        onChange={e => setFormData({...formData, description: e.target.value})}
+                        className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none h-20 resize-none"
+                        placeholder="Tell us about this place..."
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-400 uppercase mb-1">Category</label>
+                        <select 
+                          value={formData.category}
+                          onChange={e => setFormData({...formData, category: e.target.value})}
+                          className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+                        >
+                          <option>Cafe</option>
+                          <option>Co-working</option>
+                          <option>Nomad-House</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-400 uppercase mb-1">Image URL (Optional)</label>
+                        <input 
+                          value={formData.imageIPFS}
+                          onChange={e => setFormData({...formData, imageIPFS: e.target.value})}
+                          className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+                          placeholder="IPFS or HTTP link"
+                        />
+                      </div>
+                    </div>
+                    <button 
+                      type="submit"
+                      className="w-full py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 shadow-lg shadow-indigo-200 transition-all"
+                    >
+                      Confirm & Add to Map
+                    </button>
+                  </form>
+                </>
               )}
             </motion.div>
           )}
