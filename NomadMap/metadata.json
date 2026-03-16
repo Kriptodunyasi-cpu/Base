@@ -1,0 +1,5 @@
+{
+  "name": "NomadMap",
+  "description": "A decentralized map for digital nomads to discover co-working spaces, cafes, and nomad houses with on-chain check-ins.",
+  "requestFramePermissions": ["geolocation"]
+}
