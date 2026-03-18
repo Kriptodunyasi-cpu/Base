@@ -1,0 +1,59 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "Stores user profile, wallet info, and portfolio summary for matching.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "evmAddress": { "type": "string" },
+        "solanaAddress": { "type": "string" },
+        "portfolioSummary": { 
+          "type": "object",
+          "description": "Summary of holdings for matching logic (e.g., { 'BTC': 0.5, 'ETH': 10 })"
+        },
+        "lastActive": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid"]
+    },
+    "Message": {
+      "title": "Chat Message",
+      "description": "A message sent between two users.",
+      "type": "object",
+      "properties": {
+        "senderId": { "type": "string" },
+        "receiverId": { "type": "string" },
+        "text": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "chatId": { "type": "string", "description": "Combined ID of both users for filtering" }
+      },
+      "required": ["senderId", "receiverId", "text", "timestamp", "chatId"]
+    },
+    "Watchlist": {
+      "title": "User Watchlist",
+      "description": "Coins tracked by the user.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "coinIds": { "type": "array", "items": { "type": "string" } }
+      },
+      "required": ["userId", "coinIds"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profile data"
+    },
+    "/messages/{messageId}": {
+      "schema": "Message",
+      "description": "Direct messages"
+    },
+    "/watchlists/{userId}": {
+      "schema": "Watchlist",
+      "description": "User's tracked coins"
+    }
+  }
+}
