@@ -1,1 +1,12 @@
+export const PROJECT_CONFIG = {
+  name: "CoinMarketBase",
+  symbol: "CMB",
+  genesisWallet: "0x626b4650E09484C9178DaCa20B830A5Fc0CE0638",
+  genesisContract: "0x..",
+  network: {
+    name: "Base Sepolia",
+    chainId: 84532,
+    explorer: "https://sepolia.basescan.org/address/"
+  }
+};
 
