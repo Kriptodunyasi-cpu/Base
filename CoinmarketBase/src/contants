@@ -1,5 +1,5 @@
 export const PROJECT_CONFIG = {
-  name: "CoinMarketBase",
+  name: "CoinmarketBase",
   symbol: "CMB",
   genesisWallet: "0x626b4650E09484C9178DaCa20B830A5Fc0CE0638",
   genesisContract: "0x2F27Fb43d057BC401cdDFD4eCB3f9D011df6A57B",
