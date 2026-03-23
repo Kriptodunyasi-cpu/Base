@@ -22,7 +22,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { fetchTopCoins, CoinData, getTopGainers, getTopLosers } from './services/cryptoService';
 import { connectEVM, connectSolana, analyzePortfolio, Portfolio, PortfolioDetails, TokenAsset, calculateSimilarity } from './services/walletService';
-import { PROJECT_CONFIG } from './contants/project';
+import { PROJECT_CONFIG } from './constants/project';
 import { LineChart, Line, ResponsiveContainer, YAxis } from 'recharts';
 
 // --- Components ---
