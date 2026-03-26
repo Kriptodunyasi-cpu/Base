@@ -1,0 +1,87 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "User Profile",
+      "description": "Information about a platform user.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Unique identifier for the user." },
+        "displayName": { "type": "string", "description": "User's public name." },
+        "email": { "type": "string", "format": "email", "description": "User's email address." },
+        "photoURL": { "type": "string", "format": "uri", "description": "URL to user's profile picture." },
+        "bio": { "type": "string", "description": "Short biography of the user." },
+        "country": { "type": "string", "description": "User's home country." },
+        "totalEarnings": { "type": "number", "description": "Total earnings from engagement and donations." }
+      },
+      "required": ["uid", "displayName", "email"]
+    },
+    "Recipe": {
+      "title": "Recipe",
+      "description": "A food, dessert, or drink recipe shared by a user.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique identifier for the recipe." },
+        "authorId": { "type": "string", "description": "UID of the recipe author." },
+        "authorName": { "type": "string", "description": "Display name of the author." },
+        "title": { "type": "string", "description": "Title of the recipe." },
+        "description": { "type": "string", "description": "Short description of the dish." },
+        "category": { "type": "string", "enum": ["food", "dessert", "drink", "salad"], "description": "Category of the dish." },
+        "country": { "type": "string", "description": "Country of origin for the recipe." },
+        "ingredients": { "type": "array", "items": { "type": "string" }, "description": "List of ingredients." },
+        "steps": { "type": "array", "items": { "type": "string" }, "description": "Step-by-step instructions." },
+        "mediaUrl": { "type": "string", "format": "uri", "description": "URL to the recipe image or video." },
+        "mediaType": { "type": "string", "enum": ["image", "video"], "description": "Type of media uploaded." },
+        "likesCount": { "type": "number", "description": "Number of likes." },
+        "commentsCount": { "type": "number", "description": "Number of comments." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "When the recipe was posted." }
+      },
+      "required": ["authorId", "title", "category", "mediaUrl"]
+    },
+    "Comment": {
+      "title": "Comment",
+      "description": "A comment on a recipe.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique identifier for the comment." },
+        "recipeId": { "type": "string", "description": "ID of the recipe being commented on." },
+        "userId": { "type": "string", "description": "UID of the commenter." },
+        "userName": { "type": "string", "description": "Display name of the commenter." },
+        "text": { "type": "string", "description": "Content of the comment." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "When the comment was posted." }
+      },
+      "required": ["recipeId", "userId", "text"]
+    },
+    "Donation": {
+      "title": "Donation",
+      "description": "A small tip or donation sent to a recipe author.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique identifier for the donation." },
+        "recipeId": { "type": "string", "description": "ID of the recipe that inspired the donation." },
+        "fromUserId": { "type": "string", "description": "UID of the donor." },
+        "toUserId": { "type": "string", "description": "UID of the recipient." },
+        "amount": { "type": "number", "description": "Amount donated (simulated token value)." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "When the donation occurred." }
+      },
+      "required": ["recipeId", "fromUserId", "toUserId", "amount"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "User profile documents."
+    },
+    "/recipes/{recipeId}": {
+      "schema": "Recipe",
+      "description": "Shared recipes."
+    },
+    "/recipes/{recipeId}/comments/{commentId}": {
+      "schema": "Comment",
+      "description": "Comments on a specific recipe."
+    },
+    "/donations/{donationId}": {
+      "schema": "Donation",
+      "description": "Record of tips and donations."
+    }
+  }
+}
