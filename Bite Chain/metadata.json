@@ -1,0 +1,5 @@
+{
+  "name": "Bite Chain",
+  "description": "Global food culture platform for crypto users. Share recipes, upload cooking videos, and earn rewards through community engagement and donations.",
+  "requestFramePermissions": ["camera", "microphone"]
+}
