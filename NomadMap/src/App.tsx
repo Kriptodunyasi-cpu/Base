@@ -25,7 +25,12 @@ import {
   MessageSquare,
   ShieldAlert,
   UserX,
-  Send
+  Send,
+  Lock,
+  Unlock,
+  Wifi,
+  Star,
+  Zap
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { NOMAD_MAP_ABI, BASE_SEPOLIA_CONFIG } from './constants';
@@ -59,6 +64,14 @@ interface Message {
   timestamp: number;
 }
 
+interface Review {
+  id: number;
+  author: string;
+  content: string;
+  rating: number;
+  timestamp: number;
+}
+
 interface Location {
   id: number;
   name: string;
@@ -69,6 +82,10 @@ interface Location {
   category: string;
   totalCheckIns: number;
   creator: string;
+  wifiSpeedDownload?: number;
+  wifiSpeedUpload?: number;
+  unlockPrice: number; // In NCAT or simulated USD
+  reviews: Review[];
 }
 
 // --- Constants ---
@@ -86,7 +103,14 @@ const MOCK_LOCATIONS: Location[] = [
     long: 28.9748,
     category: "Cafe",
     totalCheckIns: 124,
-    creator: "0x123...abc"
+    creator: "0x123...abc",
+    wifiSpeedDownload: 85,
+    wifiSpeedUpload: 45,
+    unlockPrice: 100, // 100 NCAT (~0.01$)
+    reviews: [
+      { id: 1, author: "0xNomad1", content: "Best wifi in the area!", rating: 5, timestamp: Date.now() - 86400000 },
+      { id: 2, author: "0xTraveler", content: "A bit crowded but worth it.", rating: 4, timestamp: Date.now() - 172800000 }
+    ]
   },
   {
     id: 2,
@@ -97,7 +121,13 @@ const MOCK_LOCATIONS: Location[] = [
     long: 28.9921,
     category: "Co-working",
     totalCheckIns: 89,
-    creator: "0x456...def"
+    creator: "0x456...def",
+    wifiSpeedDownload: 120,
+    wifiSpeedUpload: 80,
+    unlockPrice: 150,
+    reviews: [
+      { id: 3, author: "0xBuilder", content: "Professional environment.", rating: 5, timestamp: Date.now() - 432000000 }
+    ]
   },
   {
     id: 3,
@@ -108,7 +138,11 @@ const MOCK_LOCATIONS: Location[] = [
     long: 29.0270,
     category: "Nomad-House",
     totalCheckIns: 45,
-    creator: "0x789...ghi"
+    creator: "0x789...ghi",
+    wifiSpeedDownload: 50,
+    wifiSpeedUpload: 20,
+    unlockPrice: 200,
+    reviews: []
   }
 ];
 
@@ -137,11 +171,15 @@ export default function App() {
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [notification, setNotification] = useState<{ message: string, type: 'error' | 'success' | 'info' } | null>(null);
+  const [unlockedLocations, setUnlockedLocations] = useState<number[]>([]);
   const [formData, setFormData] = useState({
     name: '',
     description: '',
     category: 'Cafe',
-    imageIPFS: ''
+    imageIPFS: '',
+    wifiSpeedDownload: '',
+    wifiSpeedUpload: '',
+    unlockPrice: '100'
   });
 
   const showNotification = (message: string, type: 'error' | 'success' | 'info' = 'info') => {
@@ -256,7 +294,9 @@ export default function App() {
           long: Number(loc.long) / SCALE,
           category: loc.category,
           totalCheckIns: Number(loc.totalCheckIns),
-          creator: loc.creator
+          creator: loc.creator,
+          unlockPrice: 100, // Default for on-chain locations
+          reviews: [] // Default for on-chain locations
         });
       }
       if (loadedLocations.length > 0) {
@@ -265,6 +305,28 @@ export default function App() {
     } catch (error) {
       console.error("Failed to load locations", error);
     }
+  };
+
+  const handleUnlock = (locationId: number) => {
+    if (!account) {
+      showNotification("Please connect your wallet to unlock content.", "error");
+      return;
+    }
+
+    const loc = locations.find(l => l.id === locationId);
+    if (!loc) return;
+
+    if (ncatBalance < loc.unlockPrice) {
+      showNotification(`Insufficient NCAT! You need ${loc.unlockPrice} NCAT to unlock this spot's details.`, "error");
+      return;
+    }
+
+    // Simulate micro-payment
+    setNcatBalance(prev => prev - loc.unlockPrice);
+    setUnlockedLocations([...unlockedLocations, locationId]);
+    
+    // In a real app, we would send loc.unlockPrice * 0.8 to loc.creator on-chain
+    showNotification(`Content unlocked! 80% of your payment was sent to the contributor.`, "success");
   };
 
   const handleAddLocation = async (e: React.FormEvent) => {
@@ -278,49 +340,36 @@ export default function App() {
       return;
     }
 
-    if (!contract) {
-      // For demo purposes, we'll just add it to the local state if no contract
-      const newLoc: Location = {
-        id: locations.length + 1,
-        name: formData.name,
-        description: formData.description,
-        imageIPFS: formData.imageIPFS || `https://picsum.photos/seed/${formData.name}/400/300`,
-        lat: newLocationCoords[0],
-        long: newLocationCoords[1],
-        category: formData.category,
-        totalCheckIns: 0,
-        creator: account
-      };
-      setLocations([...locations, newLoc]);
-      setIsAddingLocation(false);
-      setNewLocationCoords(null);
-      setFormData({ name: '', description: '', category: 'Cafe', imageIPFS: '' });
-      showNotification("New spot added (Demo Mode)!", "success");
-      return;
-    }
+    // For demo purposes, we'll just add it to the local state
+    const newLoc: Location = {
+      id: locations.length + 1,
+      name: formData.name,
+      description: formData.description,
+      imageIPFS: formData.imageIPFS || `https://picsum.photos/seed/${formData.name}/400/300`,
+      lat: newLocationCoords[0],
+      long: newLocationCoords[1],
+      category: formData.category,
+      totalCheckIns: 0,
+      creator: account,
+      wifiSpeedDownload: Number(formData.wifiSpeedDownload) || 0,
+      wifiSpeedUpload: Number(formData.wifiSpeedUpload) || 0,
+      unlockPrice: Number(formData.unlockPrice) || 100,
+      reviews: []
+    };
 
-    try {
-      const tx = await contract.addLocation(
-        formData.name,
-        formData.description,
-        formData.imageIPFS,
-        Math.round(newLocationCoords[0] * SCALE),
-        Math.round(newLocationCoords[1] * SCALE),
-        formData.category
-      );
-      await tx.wait();
-      loadLocations(contract);
-      setIsAddingLocation(false);
-      setNewLocationCoords(null);
-      showNotification("Location added successfully!", "success");
-    } catch (error: any) {
-      console.error("Failed to add location", error);
-      if (error.code === "ACTION_REJECTED" || error.code === 4001) {
-        showNotification("Transaction was cancelled.", "info");
-      } else {
-        showNotification("Failed to add location to blockchain.", "error");
-      }
-    }
+    setLocations([...locations, newLoc]);
+    setIsAddingLocation(false);
+    setNewLocationCoords(null);
+    setFormData({ 
+      name: '', 
+      description: '', 
+      category: 'Cafe', 
+      imageIPFS: '',
+      wifiSpeedDownload: '',
+      wifiSpeedUpload: '',
+      unlockPrice: '100'
+    });
+    showNotification("New spot added! You are now a contributor and will earn from unlocks.", "success");
   };
 
   const handleCheckIn = async (locationId: number) => {
@@ -989,6 +1038,39 @@ export default function App() {
                         />
                       </div>
                     </div>
+
+                    <div className="grid grid-cols-3 gap-4">
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-400 uppercase mb-1">WiFi Down (Mbps)</label>
+                        <input 
+                          type="number"
+                          value={formData.wifiSpeedDownload}
+                          onChange={e => setFormData({...formData, wifiSpeedDownload: e.target.value})}
+                          className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+                          placeholder="85"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-400 uppercase mb-1">WiFi Up (Mbps)</label>
+                        <input 
+                          type="number"
+                          value={formData.wifiSpeedUpload}
+                          onChange={e => setFormData({...formData, wifiSpeedUpload: e.target.value})}
+                          className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+                          placeholder="45"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-400 uppercase mb-1">Unlock Price</label>
+                        <input 
+                          type="number"
+                          value={formData.unlockPrice}
+                          onChange={e => setFormData({...formData, unlockPrice: e.target.value})}
+                          className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+                          placeholder="100"
+                        />
+                      </div>
+                    </div>
                     <button 
                       type="submit"
                       className="w-full py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 shadow-lg shadow-indigo-200 transition-all"
@@ -1248,50 +1330,128 @@ export default function App() {
               </div>
 
               <div className="p-6 flex-1 overflow-y-auto">
-                <h2 className="text-2xl font-bold text-slate-900">{selectedLocation.name}</h2>
-                <div className="flex items-center gap-2 mt-2 text-slate-500 text-sm">
-                  <MapPin className="w-4 h-4" />
-                  <span>{selectedLocation.lat.toFixed(4)}, {selectedLocation.long.toFixed(4)}</span>
-                </div>
-
-                <div className="mt-6">
-                  <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">About</h3>
-                  <p className="text-slate-600 leading-relaxed">
-                    {selectedLocation.description}
-                  </p>
-                </div>
-
-                <div className="mt-8 p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                  <div className="flex justify-between items-center">
-                    <div>
-                      <p className="text-xs text-slate-400 uppercase font-semibold">Total Check-ins</p>
-                      <p className="text-2xl font-bold text-indigo-600">{selectedLocation.totalCheckIns}</p>
+                <div className="flex justify-between items-start">
+                  <div>
+                    <h2 className="text-2xl font-bold text-slate-900">{selectedLocation.name}</h2>
+                    <div className="flex items-center gap-2 mt-1 text-slate-500 text-sm">
+                      <MapPin className="w-4 h-4" />
+                      <span>{selectedLocation.lat.toFixed(4)}, {selectedLocation.long.toFixed(4)}</span>
                     </div>
-                    <div className="w-12 h-12 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-600">
-                      <CheckCircle2 className="w-6 h-6" />
+                  </div>
+                  <div className="flex flex-col items-end">
+                    <div className="flex items-center gap-1 text-amber-500">
+                      <Star className="w-4 h-4 fill-current" />
+                      <span className="text-sm font-bold">
+                        {selectedLocation.reviews.length > 0 
+                          ? (selectedLocation.reviews.reduce((acc, r) => acc + r.rating, 0) / selectedLocation.reviews.length).toFixed(1)
+                          : "N/A"}
+                      </span>
                     </div>
+                    <span className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter">{selectedLocation.reviews.length} Reviews</span>
                   </div>
                 </div>
 
-                <div className="mt-6">
-                  <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Creator</h3>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2 text-sm text-slate-600">
-                      <div className="w-6 h-6 bg-slate-200 rounded-full" />
-                      <span className="font-mono">{selectedLocation.creator.slice(0, 10)}...</span>
-                    </div>
-                    {rankConfig.messaging && account !== selectedLocation.creator && (
-                      <button 
-                        onClick={() => {
-                          setActiveChat(selectedLocation.creator);
-                          setIsMessagingOpen(true);
-                        }}
-                        className="p-2 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-100 transition-all"
-                        title="Message Creator"
-                      >
-                        <MessageSquare className="w-4 h-4" />
-                      </button>
+                <div className="mt-6 space-y-6">
+                  <div>
+                    <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">About this spot</h3>
+                    <p className="text-slate-600 text-sm leading-relaxed">
+                      {selectedLocation.description}
+                    </p>
+                  </div>
+
+                  {/* WiFi & Reviews - Locked Content */}
+                  <div className="relative">
+                    {!unlockedLocations.includes(selectedLocation.id) && selectedLocation.creator !== account && (
+                      <div className="absolute inset-0 z-10 backdrop-blur-md bg-white/40 rounded-2xl flex flex-col items-center justify-center p-6 border border-white/50 shadow-inner">
+                        <div className="w-12 h-12 bg-indigo-600 rounded-full flex items-center justify-center text-white mb-3 shadow-lg">
+                          <Lock className="w-6 h-6" />
+                        </div>
+                        <h4 className="text-sm font-bold text-slate-900">Premium Data Locked</h4>
+                        <p className="text-[11px] text-slate-500 text-center mt-1 mb-4">
+                          Unlock WiFi speed tests and nomad reviews for this spot.
+                        </p>
+                        <button 
+                          onClick={() => handleUnlock(selectedLocation.id)}
+                          className="w-full py-2 bg-indigo-600 text-white rounded-xl font-bold text-xs hover:bg-indigo-700 transition-all flex items-center justify-center gap-2"
+                        >
+                          <Zap className="w-3 h-3 text-amber-300" />
+                          Unlock for {selectedLocation.unlockPrice} NCAT
+                        </button>
+                      </div>
                     )}
+
+                    <div className={cn("space-y-6", !unlockedLocations.includes(selectedLocation.id) && selectedLocation.creator !== account && "opacity-20 select-none pointer-events-none")}>
+                      {/* WiFi Speed */}
+                      <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-2">
+                            <Wifi className="w-4 h-4 text-indigo-600" />
+                            <h3 className="text-xs font-bold text-slate-900 uppercase">WiFi Speed Test</h3>
+                          </div>
+                          <span className="text-[10px] text-emerald-500 font-bold uppercase bg-emerald-50 px-2 py-0.5 rounded-full">Verified</span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="text-center p-2 bg-white rounded-xl border border-slate-100">
+                            <p className="text-[10px] text-slate-400 font-bold uppercase">Download</p>
+                            <p className="text-xl font-black text-indigo-600">{selectedLocation.wifiSpeedDownload}<span className="text-[10px] ml-0.5">Mbps</span></p>
+                          </div>
+                          <div className="text-center p-2 bg-white rounded-xl border border-slate-100">
+                            <p className="text-[10px] text-slate-400 font-bold uppercase">Upload</p>
+                            <p className="text-xl font-black text-indigo-600">{selectedLocation.wifiSpeedUpload}<span className="text-[10px] ml-0.5">Mbps</span></p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Reviews */}
+                      <div>
+                        <div className="flex items-center justify-between mb-3">
+                          <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Nomad Reviews</h3>
+                          <button className="text-[10px] text-indigo-600 font-bold uppercase hover:underline">+ Add Review</button>
+                        </div>
+                        <div className="space-y-3">
+                          {selectedLocation.reviews.length > 0 ? selectedLocation.reviews.map(review => (
+                            <div key={review.id} className="p-3 bg-white rounded-xl border border-slate-100 shadow-sm">
+                              <div className="flex justify-between items-start mb-2">
+                                <span className="text-[10px] font-bold text-indigo-600 truncate max-w-[120px]">{review.author}</span>
+                                <div className="flex gap-0.5">
+                                  {[...Array(5)].map((_, i) => (
+                                    <Star key={i} className={cn("w-2.5 h-2.5", i < review.rating ? "text-amber-400 fill-current" : "text-slate-200")} />
+                                  ))}
+                                </div>
+                              </div>
+                              <p className="text-xs text-slate-600 leading-relaxed">{review.content}</p>
+                            </div>
+                          )) : (
+                            <p className="text-xs text-slate-400 italic text-center py-4">No reviews yet. Be the first to share your experience!</p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="pt-6 border-t border-slate-100">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-slate-100 rounded-full flex items-center justify-center text-slate-400">
+                          <Globe className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <p className="text-[10px] text-slate-400 font-bold uppercase">Contributor</p>
+                          <p className="text-xs font-bold text-slate-900 truncate max-w-[150px]">{selectedLocation.creator}</p>
+                        </div>
+                      </div>
+                      {rankConfig.messaging && selectedLocation.creator !== account && (
+                        <button 
+                          onClick={() => {
+                            setActiveChat(selectedLocation.creator);
+                            setIsMessagingOpen(true);
+                          }}
+                          className="p-2 bg-slate-900 text-white rounded-xl hover:bg-slate-800 transition-all"
+                        >
+                          <MessageSquare className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
